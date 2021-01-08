@@ -1,0 +1,1448 @@
+---
+title: "House Price Prediction Project"
+author: "Sami Halawa"
+date: "08/01/2021"
+output:
+  pdf_document: 
+    toc: yes
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width=85)
+
+```
+
+
+
+
+# Section 1 - Introduction
+
+As part of the Professional Certificate in Data Science course by Harvard, verified students are required to apply the knowledge learnt throughout the course to a dataset of their choice.
+\  
+
+After exploring the Kaggle website and UCI Machine Learning Repository, I decided to select the following dataset from Kaggle:
+\
+
+- House Prices Advanced Regression Techniques [see here](https://www.kaggle.com/c/house-prices-advanced-regression-techniques) 
+
+
+The dataset contains 79 variables that describe nearly all the features of residential properties in a city in Iowa.
+\
+
+We will attempt to explore which features allow us to predict the final sale price of each home. 
+
+## Aim
+
+We must build a model that predicts the sale price (SalePrice) for each house (Id). 
+\
+
+Performance is evaluated on RMSE between the logarithm of the predicted value and the logarithm of the actual sale price. 
+\
+
+From the leadership board at the time of writing this report, 
+
+- Median RMSLE = 0.14222
+- Top 90th percentile = 0.120214
+- Top 95th percentile = 0.1179585
+
+
+I will attempt to produce a model that generates an RMSLE <= median RMSLE generated from the competition leadership board. 
+\
+
+**AIM: Produce a model RMSLE <= 0.14222**
+
+
+$$ RMSLE = \sqrt{\frac{1}{N} \sum_{u,i}( log(\hat{y}_{u,i}) - log(y_{u,i}) )^2}  $$
+
+```{r}
+# Creating a function to calculate the RMSLE
+
+RMSLE <- function(a){
+  RMSE(log(test_set$SalePrice),log(a))
+}
+
+```
+
+## Executive Summary
+
+In this project, I start off with building a predictive model based on linear regression techniques. 
+\
+
+I then apply more advanced machine learning algorithms to explore whether we can further improve the accuracy of our predictions. 
+\
+
+The model that produces the most accurate result is the *Ensemble* model, having produced an **RMSLE of 0.10447** which represents a *70.1%* improvement in RMSLE relative to our first model *(Mean Model)*.  
+
+# Section 2 - Method / Analysis
+
+## Step 1 -  Installing required packages
+
+The following code installs all of the necessary packages used in this project.
+
+```{r load packages, message=FALSE, warning=FALSE}
+# Installing packages, if required. Note: this process may take a few minutes. 
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org",
+                                         dependencies = TRUE)
+
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org",
+                                     dependencies = TRUE)
+
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org",
+                                          dependencies = TRUE)
+
+if(!require(lubridate)) install.packages("lubridate", repos = "http://cran.us.r-project.org",
+                                         dependencies = TRUE)
+
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org",
+                                     dependencies = TRUE)
+
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org",
+                                     dependencies = TRUE)
+
+if(!require(readxl)) install.packages("readxl", repos = "http://cran.us.r-project.org",
+                                      dependencies = TRUE)
+
+if(!require(downloader)) install.packages("downloader", repos = "http://cran.us.r-project.org",
+                                          dependencies = TRUE)
+
+if(!require(RCurl)) install.packages("RCurl", repos = "http://cran.us.r-project.org",
+                                     dependencies = TRUE)
+
+if(!require(kableExtra)) install.packages("knitExtra", repos = "http://cran.us.r-project.org",
+                                          dependencies = TRUE)
+
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org",
+                                     dependencies = TRUE)
+
+if(!require(reshape2)) install.packages("reshape2", repos = "http://cran.us.r-project.org",
+                                        dependencies = TRUE)
+
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org",
+                                          dependencies = TRUE)
+
+if(!require(arm)) install.packages("arm", repos = "http://cran.us.r-project.org",
+                                   dependencies = TRUE)
+
+if(!require(xgboost)) install.packages("xgboost", repos = "http://cran.us.r-project.org",
+                                       dependencies = TRUE)
+
+if(!require(gbm)) install.packages("gbm", repos = "http://cran.us.r-project.org",
+                                   dependencies = TRUE)
+
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org",
+                                            dependencies = TRUE)
+
+
+# Loading packages
+
+library(tidyverse)
+library(caret)
+library(data.table)
+library(lubridate)
+library(dplyr)
+library(readr)
+library(downloader)
+library(RCurl)
+library(readxl)
+library(kableExtra)
+library(knitr)
+library(randomForest)
+library(reshape2)
+library(rpart.plot)
+library(arm)
+library(xgboost)
+library(gbm)
+library(randomForest)
+
+```
+
+
+## Step 2 - Preparing the Data
+
+### Importing Data
+
+```{r}
+
+# Reading in the data from Github
+
+#### TEST data
+
+test_url <- "https://raw.githubusercontent.com/Sami-Halawa/edx-Capstone-CYO-Project/main/test.csv"
+
+test <- tempfile()
+download.file(test_url, test)
+
+test <- read_csv(test)
+
+# Converting to a dataframe 
+
+test <- as.data.frame(test)
+
+### TRAIN data
+
+train_url <- "https://raw.githubusercontent.com/Sami-Halawa/edx-Capstone-CYO-Project/main/train.csv"
+
+train <- tempfile()
+download.file(train_url, train)
+
+train <- read_csv(train)
+
+# Converting to a dataframe 
+
+train <- as.data.frame(train)
+
+
+
+```
+
+## Step 3 - Preprocessing
+
+Prior to conducting any data analysis, it is important to familiarise ourselves with the dataset. We will use the head and str functions to obtain a snapshot of the edx dataset. 
+
+We will also use the summary function to obtain a summary for each variable and check whether there are any missing values (NA's).
+
+### Quick Snapshot of the data
+
+```{r}
+# Snapshot of the train set
+
+str(train)
+
+summary(train)
+
+```
+
+
+### Missing Values
+
+As can be seen from the output below, there are a number of attributes / fields that contain missing values. 
+
+The top 3 attributes by total number of missing values are:
+
+- PoolQC (1456)
+- MiscFeature (1408)
+- Alley (1352)
+
+These will need to be amended / filled in prior to conducting analysis and building our models. 
+
+
+```{r}
+# Checking for missing values on a column by column basis
+
+test_na <- data.frame(NAs=colSums(is.na(test))) %>% filter(NAs>0) %>% arrange(desc(NAs))
+
+test_na 
+
+train_na <- data.frame(NAs=colSums(is.na(train))) %>% filter(NAs>0) %>% arrange(desc(NAs))
+
+train_na 
+
+```
+
+### Updating Values
+
+My approach for filling in missing values is as follows: 
+
+1. Where attributes represent features that can be quantified, I will replace missing values with zeros (0). 
+
+- LotFrontage represents "Linear feet of street connected to property". I will replace NAs with 0. 
+
+
+2. Where they represent qualitative features, I will replace missing values with "None" if applicable or the most frequent value where "None" does not exist.
+
+- PoolQC represents the quality of the swimming pool, if a property has one. I will replace the NA values with "None"
+
+```{r}
+# UPDATING MISSING VALUES in TRAIN SET
+
+train <- train %>%
+  mutate(PoolQC = ifelse(is.na(PoolQC), "None", PoolQC),
+         MiscFeature = ifelse(is.na(MiscFeature), "None", MiscFeature),
+         Alley = ifelse(is.na(Alley), "None", Alley),Fence = ifelse(is.na(Fence), "None", Fence),
+         FireplaceQu = ifelse(is.na(FireplaceQu), "None", FireplaceQu),
+         GarageFinish = ifelse(is.na(GarageFinish), "None", GarageFinish),
+         GarageQual = ifelse(is.na(GarageQual), "None", GarageQual),
+         GarageCond = ifelse(is.na(GarageCond), "None", GarageCond),
+         GarageType = ifelse(is.na(GarageType), "None", GarageType),
+         BsmtCond = ifelse(is.na(BsmtCond), "None", BsmtCond),
+         BsmtQual = ifelse(is.na(BsmtQual), "None", BsmtQual),
+         BsmtExposure = ifelse(is.na(BsmtExposure), "None", BsmtExposure),
+         BsmtFinType1 = ifelse(is.na(BsmtFinType1), "None", BsmtFinType1),
+         BsmtFinType2 = ifelse(is.na(BsmtFinType2), "None", BsmtFinType2),
+         MasVnrType = ifelse(is.na(MasVnrType), "None", MasVnrType),
+         MSZoning = ifelse(is.na(MSZoning), "RL", MSZoning),
+         Utilities = ifelse(is.na(Utilities), "Allpub", Utilities),
+         Functional = ifelse(is.na(Functional), "Typ", Functional),
+         Exterior1st = ifelse(is.na(Exterior1st), "VinylSd", Exterior1st),
+         Exterior2nd = ifelse(is.na(Exterior2nd), "VinylSd", Exterior2nd),
+         KitchenQual = ifelse(is.na(KitchenQual), "None", KitchenQual),
+         SaleType = ifelse(is.na(SaleType), "WD", SaleType),
+         LotFrontage = ifelse(is.na(LotFrontage), 0, LotFrontage),
+         GarageYrBlt = ifelse(is.na(GarageYrBlt), 0, GarageYrBlt),
+         MasVnrArea = ifelse(is.na(MasVnrArea), 0, MasVnrArea),
+         BsmtFullBath = ifelse(is.na(BsmtFullBath), 0, BsmtFullBath),
+         BsmtHalfBath = ifelse(is.na(BsmtHalfBath), 0, BsmtHalfBath),
+         BsmtFinSF1 = ifelse(is.na(BsmtFinSF1), 0, BsmtFinSF1),
+         BsmtFinSF2 = ifelse(is.na(BsmtFinSF2), 0, BsmtFinSF2),
+         BsmtUnfSF = ifelse(is.na(BsmtUnfSF), 0, BsmtUnfSF),
+         TotalBsmtSF = ifelse(is.na(TotalBsmtSF), 0, TotalBsmtSF),
+         GarageCars = ifelse(is.na(GarageCars), 0, GarageCars),
+         GarageArea = ifelse(is.na(GarageArea), 0, GarageArea),
+         Electrical = ifelse(is.na(Electrical), "SBrkr", Electrical))
+
+# New total number of NAs
+
+sum(is.na(train))
+
+
+# UPDATING MISSING VALUES in TEST SET
+
+test <- test %>%
+  mutate(PoolQC = ifelse(is.na(PoolQC), "None", PoolQC),
+         MiscFeature = ifelse(is.na(MiscFeature), "None", MiscFeature),
+         Alley = ifelse(is.na(Alley), "None", Alley),Fence = ifelse(is.na(Fence), "None", Fence),
+         FireplaceQu = ifelse(is.na(FireplaceQu), "None", FireplaceQu),
+         GarageFinish = ifelse(is.na(GarageFinish), "None", GarageFinish),
+         GarageQual = ifelse(is.na(GarageQual), "None", GarageQual),
+         GarageCond = ifelse(is.na(GarageCond), "None", GarageCond),
+         GarageType = ifelse(is.na(GarageType), "None", GarageType),
+         BsmtCond = ifelse(is.na(BsmtCond), "None", BsmtCond),
+         BsmtQual = ifelse(is.na(BsmtQual), "None", BsmtQual),
+         BsmtExposure = ifelse(is.na(BsmtExposure), "None", BsmtExposure),
+         BsmtFinType1 = ifelse(is.na(BsmtFinType1), "None", BsmtFinType1),
+         BsmtFinType2 = ifelse(is.na(BsmtFinType2), "None", BsmtFinType2),
+         MasVnrType = ifelse(is.na(MasVnrType), "None", MasVnrType),
+         MSZoning = ifelse(is.na(MSZoning), "RL", MSZoning),
+         Utilities = ifelse(is.na(Utilities), "Allpub", Utilities),
+         Functional = ifelse(is.na(Functional), "Typ", Functional),
+         Exterior1st = ifelse(is.na(Exterior1st), "VinylSd", Exterior1st),
+         Exterior2nd = ifelse(is.na(Exterior2nd), "VinylSd", Exterior2nd),
+         KitchenQual = ifelse(is.na(KitchenQual), "None", KitchenQual),
+         SaleType = ifelse(is.na(SaleType), "WD", SaleType),
+         LotFrontage = ifelse(is.na(LotFrontage), 0, LotFrontage),
+         GarageYrBlt = ifelse(is.na(GarageYrBlt), 0, GarageYrBlt),
+         MasVnrArea = ifelse(is.na(MasVnrArea), 0, MasVnrArea),
+         BsmtFullBath = ifelse(is.na(BsmtFullBath), 0, BsmtFullBath),
+         BsmtHalfBath = ifelse(is.na(BsmtHalfBath), 0, BsmtHalfBath),
+         BsmtFinSF1 = ifelse(is.na(BsmtFinSF1), 0, BsmtFinSF1),
+         BsmtFinSF2 = ifelse(is.na(BsmtFinSF2), 0, BsmtFinSF2),
+         BsmtUnfSF = ifelse(is.na(BsmtUnfSF), 0, BsmtUnfSF),
+         TotalBsmtSF = ifelse(is.na(TotalBsmtSF), 0, TotalBsmtSF),
+         GarageCars = ifelse(is.na(GarageCars), 0, GarageCars),
+         GarageArea = ifelse(is.na(GarageArea), 0, GarageArea), 
+         Electrical = ifelse(is.na(Electrical), "SBrkr", Electrical))
+
+# New total number of NAs
+
+sum(is.na(test))
+
+```
+
+We have now successfully removed NAs from our dataset. 
+\
+
+
+### Converting characters to Factors
+
+In order to apply advanced regression techniques e.g. Rpart and Random Forest, we need to convert character columns to factors. 
+
+
+```{r}
+# Generating a list of character columns
+
+## Test Set 
+
+col_names <- colnames(test[,sapply(test,class)=="character"])
+
+# Converting these columns to factors
+
+test[col_names] <- lapply(test[col_names] , factor)
+
+## Train Set
+
+# Generating a list of character columns
+
+col_names_2 <- colnames(train[,sapply(train,class)=="character"])
+
+# Converting these columns to factors
+
+train[col_names_2] <- lapply(train[col_names_2] , factor)
+
+
+
+```
+
+
+## Step 4 - Creating the Train, Test and Validation data sets
+
+As we did with the MovieLens project, I will split the Train data into a test, train and validation set. 
+\
+
+I have used 10% of the data to generate the validation set. 
+\
+
+I will them split the train dataset into a new train and test datasets to be used for this project. Again, I will use a 90-10 split. 
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+## Creating the validation set
+
+set.seed(1, sample.kind="Rounding") # if using R 3.5 or earlier, use ‘set.seed(1)‘
+
+test_index <- createDataPartition(y=train$SalePrice, times=1, p=0.1, list=FALSE)
+
+sales_data <-train[-test_index,]
+
+temp <- train[test_index,]
+
+
+# Making sure that the key variables in the validation set are also in the sales_data set
+
+validation <- temp %>% 
+  semi_join(sales_data, by = "OverallQual") %>%
+  semi_join(sales_data, by = "GrLivArea") %>%
+  semi_join(sales_data, by = "GarageCars")
+
+
+# Adding rows removed from validation set back into the sales_data set
+
+removed <- anti_join(temp, validation)
+
+sales_data <- rbind(sales_data, removed)
+
+
+
+
+```
+
+```{r warning=FALSE}
+
+###### Creating the new Train and Test datasets
+
+# Partitioning the data
+
+set.seed(1, sample.kind="Rounding") # if using R 3.5 or earlier, use ‘set.seed(1)‘
+
+test_index <- createDataPartition(y=sales_data$SalePrice, times=1, p=0.1, list=FALSE)  
+
+# Creating the train and test sets
+
+train_set <-sales_data[-test_index,]
+
+test_set <- sales_data[test_index,]
+
+# Ensuring column names are valid
+
+colnames(test_set) <- make.names(colnames(test_set))
+colnames(train_set) <- make.names(colnames(train_set))
+
+# Removing OverallCond, GrLivArea, GarageCars from the test set that do not appear in the training set
+
+test_set <- test_set %>% 
+  semi_join(train_set, by="OverallQual") %>%
+  semi_join(train_set, by="GrLivArea") %>% 
+  semi_join(train_set, by="GarageCars") 
+
+```
+
+
+
+## Step 5 - Analysis of Data
+
+We will analyse the data using the train dataset. 
+
+```{r}
+# Number of distinct property Ids in the train set
+
+a <- train_set %>% 
+  group_by(Id) 
+
+nrow(a)
+
+```
+
+There are 1230 properties included in our train set. 
+\
+
+
+### Distribution of Sales price
+
+From the chart and summary table below, we can see that there is significant variation in the sales price (SalePrice), which is the the value we wish to predict. 
+
+- Minimum bin = 34,900
+- Mean bin = 200,545
+- Maximum bin = 755,000
+
+
+```{r}
+# Grouping sale prices
+
+sp_grouped <- train_set %>% 
+  group_by(SalePrice) %>% 
+  summarize(n=n()) 
+
+# Producing a Histogram of Sale prices
+
+sp_grouped %>% 
+  ggplot(aes(SalePrice)) + 
+  geom_histogram(bins = 50, color = "black") + 
+  scale_x_log10()
+ 
+# Summary of sale prices
+
+summary(sp_grouped)
+  
+
+```
+
+
+### Correlation Matrix
+
+To gain an insight into the relationship between variables, I will generate the correlation matrix and produce a list of the variables that are correlated with SalePrice. 
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Generating the correlation matrix 
+
+cor_train <- round(cor(train_set[, !sapply(train_set, is.factor)]),2)
+
+# Producing a heat map of correlations
+
+melted <- melt(cor_train, na.rm = TRUE)
+
+# Heatmap
+
+ggplot(data = melted, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 90, vjust = 1, 
+    size = 7, hjust = 1), axis.text.y = element_text(vjust = 1, 
+    size = 7, hjust = 1))+
+ coord_fixed()
+
+
+# Producing a table of variables correlated with Sale Price
+
+price_cor <- melted %>% filter(Var1=="SalePrice") %>% arrange(desc(value))
+price_cor %>% knitr:: kable()
+
+```
+\
+\
+
+As can be seen from above only 38 out of 79 property features actually correlate with the sale price. 
+\
+
+The top 10 correlated features are: 
+
+```{r}
+# Top 10 features correlated with SalePrice sorted by absolute correlation
+
+price_cor <- price_cor %>% filter(Var2 !="SalePrice") %>% arrange(desc(abs(value)))
+
+head(price_cor,10,value)
+
+```
+
+\
+
+We will explore using some of these top features to build our initial regression models. 
+
+## PREDICTIVE MODELS - Basic Regression:
+
+
+### 1) Mean model
+
+For our first model, we will simply assume that the Sales Price is equal to the average of all sale prices in our train set. 
+\
+The equation for this model is:
+
+$$Y_{u,i} = \mu + e_{i}$$
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculating the mean rating
+
+mu <- mean(train_set$SalePrice)
+
+mu
+
+```
+\
+The mean sale price = 181,049.2
+\
+
+#### RMSLE 
+\
+\
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculating the RMSLE using our predefined function
+
+RMSLE_mu <- RMSLE(mu)
+
+# Creating a tibble to store RMSEs
+
+results <- tibble(Model="Mean Rating", RMSLE=format(round(RMSLE_mu,5),nsmall=5))
+results %>% knitr::kable()
+
+```
+
+The basic model produces an  **RMSLE = 0.34941**. 
+
+
+### 2) Adding in Overall Quality effect
+
+We will now add in the OverallQual variable to our regression equation. 
+\
+
+Given the high correlation with SalePrice shown in the correlation matrix, I would expect adding this variable will reduce the RMSLE. 
+\
+
+Our equation now becomes:
+
+$$Y_i = \mu +b_q + e_i$$
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+### Overall Quality effect model
+
+# Generating the estimates of b_q
+
+b_q <- train_set %>% 
+  group_by(OverallQual) %>% 
+  summarise(n=n(), b_q = mean(SalePrice-mu))
+
+
+# Creating a plot of b_q
+
+qplot(b_q, data=b_q, bins=20, color=I("black"))
+
+# Predicted sale price
+
+pred_qual <- mu + test_set %>%
+  left_join(b_q, by='OverallQual') %>%
+  pull(b_q)
+
+```
+As can be seen from the plot above, there is significant variability in b_q values. Hence we would expect it to be a good predictor of sale price.
+
+
+#### RMSLE
+\
+\
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculating the RMSLE using our predefined function
+
+RMSLE_qual <- RMSLE(pred_qual)
+
+
+# Adding results to our dataframe
+
+results <- rbind(results, c(Model="Overall Quality effect", 
+                            RMSLE=format(round(RMSLE_qual,5),nsmall=5)))
+
+
+results %>% knitr::kable()
+
+```
+\
+
+\
+
+This model generated an **RMSLE = 0.21905**, which is a 37.3% improvement against the basic mean model.
+\
+
+Hence, the *OverallQual* variable is a good predictor of sale price, as expected.
+
+
+### 3) Overall Quality and Gross Living Area model
+
+We will now explore adding in the second strongest correlated variable, GrLivArea, which represents the Gross Living Area. 
+
+$$Y_i = \mu +b_q + b_{gla} + e_i$$
+
+
+```{r message=FALSE, warning=FALSE}
+
+### Overall Quality & Gross Living Area effect model
+
+# Generating the estimates of b_gla
+
+gla_avg <- train_set %>% 
+  left_join(b_q, by='OverallQual') %>%
+  group_by(GrLivArea) %>% 
+  summarise(b_gla=mean(SalePrice - mu - b_q))
+
+
+# Creating a plot of b_gla
+
+qplot(b_gla, data=gla_avg, bins=30, color=I("black"))
+
+# Generating Predictions
+
+pred_ql <- test_set %>% 
+  left_join(b_q, by='OverallQual') %>%
+  left_join(gla_avg, by='GrLivArea') %>%
+  mutate(prediction = mu + b_q + b_gla) %>%
+  pull(prediction)
+
+```
+\
+From the plot of b_gla above, I noticed that whilst there is evidence of variability the majority of values are centred around 0. This would lead me to predict a low value add from inserting this variable to our model. 
+
+\
+
+#### RMSLE
+\
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculating the RMSLE using our predefined function
+
+RMSLE_ql <- RMSLE(pred_ql)
+
+# Adding results to our dataframe
+
+results <- rbind(results, c(Model="Overall Quality & Gross Living Area effect", 
+                            RMSLE=format(round(RMSLE_ql ,5),nsmall=5)))
+
+results %>% knitr::kable()
+
+```
+\
+\
+
+\
+
+This model generated an **RMSLE = 0.26697**, which is a 23.6% improvement against the basic mean model.
+\
+
+However, our RMSLE actually increased by 21.9% relative to the RMSLE of the Overall Quality effect model.
+\
+
+Hence, I will drop this variable and replace it with the next highly correlated variable GarageCars. 
+
+
+
+### 4) Overall Quality and Garage Cars effect
+
+We now explore adding in a Garage Cars effect, given it was the second highest correlated feature with sale price. 
+
+$$Y_i = \mu +b_q + b_{gc} + e_i$$
+
+```{r}
+
+### Overall Quality and Garage Cars effect model
+
+# Generating the estimates of b_gc
+
+gc_avg <- train_set %>% 
+  left_join(b_q, by='OverallQual') %>%
+  group_by(GarageCars) %>% 
+  summarise(b_gc=mean(SalePrice - mu - b_q))
+
+
+# Creating a plot of b_gc
+
+qplot(b_gc, data=gc_avg, bins=30, color=I("black"))
+
+# Generating predictions
+
+pred_qg <- test_set %>% 
+  left_join(b_q, by='OverallQual') %>%
+  left_join(gc_avg, by='GarageCars') %>%
+  mutate(prediction = mu + b_q + b_gc) %>%
+  pull(prediction)
+
+```
+Based on the plot of b_gc above, it is clear that there is large variability in b_gc values. Hence, I would expect that this variable will help improve our prediction of sale prices.
+
+\
+
+#### RMSLE
+\
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculating the RMSLE using our predefined function
+
+RMSLE_qg <- RMSLE(pred_qg)
+
+# Adding results to our dataframe
+
+results <- rbind(results, c(Model="Overall Quality & Garage Cars effect", 
+                            RMSLE=format(round(RMSLE_qg ,5),nsmall=5)))
+
+results %>% knitr::kable()
+
+```
+\
+
+This model generated an **RMSLE = 0.20642** which is a 40.9% improvement against the basic model and a 5.8% improvement against the Overall Quality effect model. 
+\
+\
+
+
+## PREDICTIVE MODELS - Advanced:
+
+We will now explore using more advanced machine learning techniques to attempt to generate further improvements in our model's predictive abilities.  
+\
+
+We explore the performance of a series of advanced machine learning algorithms: 
+
+- Regression Tree (rpart)
+- Random Forest (rf)
+- K-Nearest Neighbours (knn)
+- Stochastic Gradient Boost (gbm)
+\
+
+We will utilise the *Caret* package to train our respective models and generate their predicted values. The steps we will take will be as follows:
+
+1. Train our model
+
+2. Predict the Sale Price using the test set
+
+3. Calculate the RMSLE
+
+4. Evaluate the models performance
+\
+
+In order to produce **reproducible results** we will utilise the *Train Control* parameter and *Set.Seed*, where necessary, in our code. 
+
+
+
+### Regression Tree
+
+The regression tree approach utilises binary recursive partitioning to split the data into partitions / branches and then continue splitting each partition into smaller groups. 
+\
+
+This approach is generally more easy to interpret than other more advanced models, but given the simplicity it often is not the most accurate. 
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Generating the tree
+
+tree <- rpart(SalePrice ~., data=train_set)
+
+# Plotting the tree
+
+rpart.plot(tree, extra = 101)
+
+```
+
+From the tree above, I noticed that the OverallQual is the key decision variable and the threshold that generates a lower sale price, at the first step, is 8 which is quite low. This low threshold makes me cast doubt on the predictive power of this approach.
+\
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Training our model
+
+train_rpart <- train(SalePrice ~., method="rpart", data=train_set)
+
+# Predictions
+
+pred_rpart <- predict(train_rpart, test_set, type="raw")
+
+# Calculating the RMSLE
+
+RMSLE_rpart <- RMSLE(pred_rpart)
+
+results <- rbind(results, c(Model="R Part", 
+                            RMSLE=format(round(RMSLE_rpart, 5),nsmall=5)))
+
+results %>% knitr::kable()
+
+
+```
+
+
+### Variable importance
+
+```{r message=FALSE, warning=FALSE}
+# Generating Variable Importance
+
+varImp(train_rpart)
+```
+
+From the table above, we note that the top 3 variables considered important by this model are: 
+
+- OverallQual
+- GrLivArea
+- GarageCars
+
+
+```{r message=FALSE, warning=FALSE}
+# Generating a list of predictor names
+
+ind <- !(train_rpart$finalModel$frame$var == "<leaf>")
+
+tree_terms <- 
+   train_rpart$finalModel$frame$var[ind] %>%
+   unique() %>%
+   as.character()
+
+tree_terms
+```
+
+\
+
+As can be seen from the table above, the rpart approach only took "OverallQual" as a predictor. 
+\
+
+We would therefore expect our RMSLE for this model to be similar to our linear Overall Quality effect model, as it includes the same predictor. 
+\
+
+The **RMSLE = 0.25823**, which is a 26.1% improvement in RMSLE relative to the basic model. However, it actually is an increase of 25% relative to the *Overall Quality & Garage Cars effect model.* 
+\
+
+This increase was expected for reasons described earlier. 
+
+
+### Random Forest
+
+The Random forest is a classification algorithm which consists of many decision trees.Random forests are popular for numerous reasons including:
+
+- They run efficiently on large datasets
+- It can handle thousands of variables as inputs
+
+\
+
+The optimal model has approx 500 trees and produces an RMSLE which is not significantly smaller than that produced using 14 trees, which I found to be the optimal value (see below).
+\
+
+Hence for reproducibility and simplicity I have used a sequence of 1 to 20 trees to determine the optimal number of trees for our train data.  
+
+```{r message=FALSE, warning=FALSE}
+
+# Determining optimal number of trees
+
+t <- seq(1,20,1)
+
+set.seed(1,sample.kind = "Rounding")
+
+RMSLES <- sapply(t, function(t){
+  
+  set.seed(1,sample.kind = "Rounding")
+  train_rf <- train(SalePrice ~., method="rf", data=train_set, ntree=t)
+
+  pred_rf <- predict(train_rf, test_set, type="raw")
+  
+  return(RMSLE(pred_rf))
+})
+
+
+```
+
+
+```{r}
+# Plotting the results
+
+qplot(t, RMSLES)
+
+
+```
+
+\
+
+From the plot of RMSLE against the number of trees, we notice that there is a significant drop in RMSLE when using up to 5 trees. The fall in RMSLE continues, albeit at a smaller rate, until we arrive at 14 trees after which we observe an up tick in RMSLE.  
+
+```{r}
+# Determining the number of trees that minimises the RMSLE
+
+t_opt <- t[which.min(RMSLES)]
+
+t[which.min(RMSLES)]
+
+RMSLE_rf <- min(RMSLES)
+
+
+# Adding RMSLE to the table
+
+results <- rbind(results, c(Model="Random Forest", 
+                            RMSLE=format(round(RMSLE_rf, 5),nsmall=5)))
+
+results %>% knitr::kable()
+```
+
+
+
+The **RMSLE from this model = 0.11278** which is a 67.7% decrease relative to the RMSLE of the basic model and a *56.3% decrease* against the Rpart model and *45.4% decrease* against the Overal Quality and Garage Cars effect model. 
+\
+
+Hence, this is our winning candidate model thus far. 
+
+
+
+```{r message=FALSE, warning=FALSE}
+# Generating the predictions for Random Forest for use later
+
+ train_rf <- train(SalePrice ~., method="rf", data=train_set, ntree=t_opt)
+
+  pred_rf <- predict(train_rf, test_set, type="raw")
+  
+  pred_rf <- unname(pred_rf)
+
+```
+
+### Variable importance
+
+The output below shows the variables considered important by this model:
+
+```{r message=FALSE, warning=FALSE}
+# Generating Variable Importance
+
+varImp(train_rf)
+
+```
+ \
+ 
+ The top 3 most important variables are:
+ 
+ - OverallQual
+ - GarageCars
+ - ExterQualTA
+ 
+\
+
+
+
+### K-Nearest Neighbours
+
+The K-Nearest Neighbours model is a supervised machine learning algorithm that assumes that similar things exist in close proximity to each other.
+
+One of the main advantages in the KNN algorithm over others is that:
+
+- It is capable of performing multi-class classification
+- It is an efficient algorithm and often produces results quickly
+\
+
+
+```{r message=FALSE, warning=FALSE}
+# Generating the model and estimates
+
+set.seed(1, sample.kind="Rounding")
+
+train_knn <- train(SalePrice ~., method="knn", data=train_set)
+
+pred_knn <- predict(train_knn, test_set, type="raw")
+
+# Calculating the RMSLE
+
+RMSLE_knn <- RMSLE(pred_knn)
+
+
+# Adding RMSLE to the table
+
+results <- rbind(results, c(Model="KNN", 
+                            RMSLE=format(round(RMSLE_knn, 5),nsmall=5)))
+
+results %>% knitr::kable()
+
+
+```
+
+The **RMSLE from this model = 0.19773** which is a 43.4% decrease against the basic model. However, it actually represents an increase of 75.3% against the random forest model. 
+
+
+### Variable importance
+
+The output below shows the variables considered important by this model:
+
+```{r message=FALSE, warning=FALSE}
+# Generating Variable Importance
+
+varImp(train_knn)
+
+```
+The top 3 most important variables are:
+
+- OverallQual
+- GrLivArea
+- TotalBsmtSF
+
+As you will note, the TotalBsmtSF variable appears in the top 3 for this model but was towards the bottom of the list in the random forest model. 
+\
+
+Perhaps this explains explain the increase in RMSLE observed. We will revisit this assertion when determining the most important variables for the subsequent models. 
+
+
+### Gradient boosting
+
+Gradient boosting is a ML technique which produces a prediction model in the form of an ensemble typically of decision trees. The model is built in a stage by stage approach. 
+
+From my research online, I noted that Gradient Boost models are often the winning models used for a number of Kaggle competition, hence I will attempt to explore one of these models with the housing dataset.
+
+### Stochastic Gradient Boosting
+
+```{r message=FALSE, warning=FALSE, results = 'hide'}
+
+### Please note that this part of the code may take several minutes to run!
+
+# Train control to ensure reproducibility 
+
+set.seed(321, sample.kind = "Rounding")
+
+seeds <- vector(mode = "list", length = 51)
+
+for(i in 1:50) seeds[[i]] <- sample.int(1000, 20)
+
+seeds[[51]] <- sample.int(1000, 1)
+
+
+my_cont <- trainControl(number= 5, seeds=seeds)
+
+
+
+# Applying a Stochastic gradient boost
+
+set.seed(1, sample.kind = "Rounding")
+
+train_gb <- train(SalePrice ~., method="gbm", data=train_set,trControl=my_cont)
+
+pred_gb <- predict(train_gb, test_set, type="raw")
+
+
+
+
+```
+
+```{r}
+# RMSLE
+
+RMSLE_gb <- RMSLE(pred_gb)
+
+
+# Adding RMSLE to the table
+
+results <- rbind(results, c(Model="Stochastic Gradient Boosting", 
+                            RMSLE=format(round(RMSLE_gb, 5),nsmall=5)))
+
+results %>% knitr::kable()
+```
+
+
+The **RMSLE from this model = 0.11627** which is a 66.7% decrease against the basic model. However, the RMSLE increased 3.1% relative to the random forest model.
+\
+
+Hence, the Random Forest model still wins.
+
+
+### Variable importance
+
+The output below shows the variables considered important by this model:
+
+```{r message=FALSE, warning=FALSE}
+# Generating Variable Importance
+
+varImp(train_gb)
+
+```
+
+The top 3 most important variables are:
+
+- OverallQual
+- GrLivArea
+- BsmtFinSF1
+
+Interestingly, the TotalBsmtSF variable features at number 4 and yet this model produces an RMSLE of 0.11627.  
+\
+
+However, I noticed that this model place less importance on this variable (17.8) and the remaining variables. Thus whilst not a great predictor, TotalBsmtSF does have some importance in predicting sale price.   
+
+
+
+### Ensemble - Averaging
+
+We will explore whether building an ensemble allows us to improve the accuracy of our prediction of sale prices. 
+
+We will take the approach of creating our ensemble using the logarithmic average of the top 2 performing models. 
+
+- Random Forest
+- Stochastic Gradient Boost (gbm)
+
+
+```{r message=FALSE, warning=FALSE}
+
+# Computing our estimate of Sale Prices
+
+pred_ensemble <- exp((log(pred_gb) + log(pred_rf))/ 2) 
+
+# Calculating the RMSLE
+
+RMSLE_ensemble <- RMSLE(pred_ensemble)
+
+# Adding RMSLE to the table
+
+results <- rbind(results, c(Model="Ensemble", 
+                            RMSLE=format(round(RMSLE_ensemble, 5),nsmall=5)))
+
+results %>% knitr::kable()
+
+```
+
+The **RMSLE from this model = 0.10447** which is a 70.1% decrease against the basic model.
+\
+
+The ensemble model now produces the lowest RMSLE and therefore becomes our **final model**. 
+
+
+
+
+# Section 3 - Results
+
+The below table summarises the RMSEs obtained by applying the respective models.
+
+```{r}
+# Generating the Results table to compare the performance of the various models
+
+results %>% arrange(desc(RMSLE)) %>% knitr::kable()
+```
+\
+\
+
+From the table above, the following in clear: 
+
+1. The OverallQual variable is a very significant predictor of the sale price. 
+
+2. Regression models are successful in generating predictions for sale prices, with the best regression model tested having generated a 41% reduction in RMSLE.
+
+3. However, we generated very significant improvements in predictive power when we applied advanced machine learning algorithms, except for Rpart. 
+\
+
+4. The regression tree model (Rpart) actually produced slightly worse estimates. This was due to it primarily basing estimates on OverallQual
+\
+
+5. The Random Forest model generated very strong estimates of sale prices, with an *RMSLE of 0.11278*  which is 67.7% lower than our basic starting model.  
+\
+6. The Stochastic Gradient Boosting model produced similar results to the Random Forest model, having produced an RMSLE = 0.11627. This is a *66.7% overall improvement* in RMSLE, however a *3.1% increase* relative to our Random Forest model.  
+\
+7. The Ensemble model produced the best estimate of sale price. It generated an *RMSLE of 0.10447*, which is a 70.1% improvement against our basic mean model.
+\
+
+8. The RMSLE produced by our best model is within the top 95th percentile of RMSLEs from the competition leadership board. Hence I would consider this project very successful. 
+
+
+## Performance against the Validation set
+
+Our final model chosen using the train and test set was the Ensemble of Random Forest and Stochastic Gradient Boosting. 
+\
+
+We will now test this against our final hold-out test set (validation). To do so we will carry out the following steps: 
+
+1. Generate predictions for the ensemble models, using the **sales_data** dataset (our new train set). 
+
+2. Combine the estimates of these models to produce the ensemble estimates.
+
+3. Compare these estimates against the actual sales prices in the **validation** (test) data set. 
+\
+\
+
+### Generating Stochastic Gradient Boosting estimates
+
+```{r message=FALSE, warning=FALSE, results = 'hide'}
+# Generating the predictions by Stochastic Gradient Boosting
+
+
+### Please note that this part of the code may take several minutes to run!
+
+# Train control to ensure reproducibility 
+
+set.seed(321, sample.kind = "Rounding")
+
+seeds <- vector(mode = "list", length = 51)
+
+for(i in 1:50) seeds[[i]] <- sample.int(1000, 20)
+
+seeds[[51]] <- sample.int(1000, 1)
+
+
+my_cont <- trainControl(number= 5, seeds=seeds)
+
+
+
+# Applying a Stochastic gradient boost
+
+set.seed(1, sample.kind = "Rounding")
+
+train_gb_v <- train(SalePrice ~., method="gbm", data=sales_data,trControl=my_cont)
+
+pred_gb_v <- predict(train_gb_v, validation, type="raw")
+
+```
+
+
+### Generating Random Forest estimates
+
+We will generate the Random Forest estimates using the optimal number of trees (t_opt) determined earlier when using the test / train sets. 
+
+
+```{r message=FALSE, warning=FALSE}
+
+### Generating our Random Forest estimates
+
+
+# Training our final model on the Sales Data
+
+  train_rf_v <- train(SalePrice ~., method="rf", data=sales_data, ntree=t_opt)
+
+# Generating Predictions
+
+  pred_rf_v <- predict(train_rf_v, validation, type="raw")
+  
+  pred_rf_v <- unname(pred_rf_v)
+  
+
+
+```
+
+
+
+
+```{r}
+### Combining the estimates to produce the Ensemble estimates
+
+# Computing the ensemble estimates of Sale Prices
+
+pred_ensemble_v <- exp((log(pred_gb_v) + log(pred_rf_v))/ 2) 
+
+# Calculating the RMSLE
+
+RMSLE_ensemble_v <- RMSE(log(validation$SalePrice), log(pred_ensemble_v))
+  
+  
+# Adding RMSLE to the table
+
+results <- rbind(results, c(Model="Ensemble on Validation set", 
+                            RMSLE=format(round(RMSLE_ensemble_v, 5),nsmall=5)))
+
+results %>% knitr::kable()
+
+
+
+```
+\
+
+The **RMSE of the Ensemble on the Validation set = 0.09941**. 
+\
+
+I am very happy with this result, as it is within the top 95% of RMSLEs on the Kaggle leadership board. 
+
+
+# Section 4 - Conclusion
+
+In this project, we started off by using regression models to attempt to predict sale prices based on features of respective properties. 
+\
+
+During our analysis we identified that the key variables that determine the sale price are: 
+
+
+```{r}
+
+# Top 10 features correlated with SalePrice sorted by absolute correlation
+
+price_cor <- price_cor %>% arrange(desc(abs(value)))
+
+head(price_cor,10,value) %>% knitr::kable()
+
+```
+\
+
+The final model chosen is the Ensemble of Random Forest and Stochastic Gradient Boosting models.
+\
+
+When testing this model against the Validation dataset, we obtained an **RMSLE = 0.09941**
+\
+
+The performance on the validation set is similar to that on our train_set, hence I would consider the ensemble model to be successful in generating a good estimate of sale prices.  
+
+
+## Limitations
+\
+
+### New features
+
+Over time, we should expect new property features to be added. This would require us to retrain our model.
+
+### Regional Variation
+
+This model was built based on data for a town in Iowa. Whilst there may be an overlap in features that apply to other towns and / or regions, we should expect that the importance of these features may differ.
+\
+
+For example in towns / regions with a large proportion of commuters, we may notice a significant importance in features that capture ease of access to transport links.
+
+\
+
+Hence we may observe a lack of direct applicability of our final model to datasets for other regions.   
+
+### Changing preferences
+
+Over time, client preferences may change making it difficult to predict sales prices. 
+\
+
+For example, back in the early 20th century wallpaper was extremely popular. However, in the 21st century it is not.
+
+\
+
+Such change in taste can occur for a number of features / variables in this dataset and hence it is important that we retrain our final model periodically. 
+
+
+
+
+## Future work
+
+From my research, I noted that xgboost models typically produced the lowest RMSLE and often featured in competition winning models. 
+\
+
+I attempted to apply this approach using "xgbDART", however I noticed that this method requires computing power beyond my PC's capabilities and will take a significant amount of time to run. 
+\
+
+Hence, I excluded this model from my project in the interest of reproducibility of my results. 
+  
+\
+
+
+## References
+
+- https://www.kaggle.com/c/house-prices-advanced-regression-techniques
+- https://rafalab.github.io/dsbook/caret.html
+- https://topepo.github.io/caret/available-models.html
+
+
+
+## Link to GitHub repository
+
+Please see below for a hyperlink to the GitHub repository for this project.
+\
+
+
+[GitHub repository for this project](https://github.com/Sami-Halawa/edx-Capstone-CYO-Project)
+
+\
+\
+\
+
+
+**THANK YOU for taking the time to read my report, I hope you enjoyed it!** 
+
+
